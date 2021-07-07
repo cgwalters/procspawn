@@ -67,10 +67,6 @@
 //!
 //! The following feature flags exist:
 //!
-//! * `safe-shared-libraries`: this feature is enabled by default.  When this
-//!   feature is disable then no validation about shared library load status
-//!   is performed around IPC calls.  This is highly unsafe if shared libraries
-//!   are being used and a function from a shared library is spawned.
 //! * `backtrace`: this feature is enabled by default.  When in use then
 //!   backtraces are captured with the `backtrace-rs` crate and serialized
 //!   across process boundaries.
@@ -120,20 +116,6 @@
 //! }
 //! ```
 //!
-//! # Shared Libraries
-//!
-//! `procspawn` uses the [`findshlibs`](https://github.com/gimli-rs/findshlibs)
-//! crate to determine where a function is located in memory in both processes.
-//! If a shared library is not loaded in the subprocess (because for instance it
-//! is loaded at runtime) then the call will fail.  Because this adds quite
-//! some overhead over every call you can also disable the `safe-shared-libraries`
-//! feature (which is on by default) in which case you are not allowed to
-//! invoke functions from shared libraries and no validation is performed.
-//!
-//! This in normal circumstances should be okay but you need to validate this.
-//! Spawning processes will be disabled if the feature is not enabled until
-//! you call the [`assert_spawn_is_safe`](fn.assert_spawn_is_safe.html) function.
-//!
 //! # Macros
 //!
 //! Alternatively the [`spawn!`](macro.spawn.html) macro can be used which can
@@ -152,9 +134,7 @@
 //! # Platform Support
 //!
 //! Currently this crate only supports macOS and Linux because ipc-channel
-//! itself does not support Windows yet.  Additionally the findshlibs which is
-//! used for the `safe-shared-libraries` feature also does not yet support
-//! Windows.
+//! itself does not support Windows yet.
 //!
 //! # More Examples
 //!
@@ -191,7 +171,7 @@ pub mod serde;
 
 mod macros;
 
-pub use self::core::{assert_spawn_is_safe, init, ProcConfig};
+pub use self::core::{init, ProcConfig};
 pub use self::error::{Location, PanicInfo, SpawnError};
 pub use self::pool::{Pool, PoolBuilder};
 pub use self::proc::{spawn, Builder, JoinHandle};

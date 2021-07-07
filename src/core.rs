@@ -6,9 +6,6 @@ use std::panic;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg(feature = "safe-shared-libraries")]
-use findshlibs::{Avma, IterationControl, Segment, SharedLibrary};
-
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender, OpaqueIpcReceiver, OpaqueIpcSender};
 use ipc_channel::ErrorKind as IpcErrorKind;
 use serde::{Deserialize, Serialize};
@@ -20,29 +17,6 @@ use crate::serde::with_ipc_mode;
 pub const ENV_NAME: &str = "__PROCSPAWN_CONTENT_PROCESS_ID";
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 static PASS_ARGS: AtomicBool = AtomicBool::new(false);
-
-#[cfg(not(feature = "safe-shared-libraries"))]
-static ALLOW_UNSAFE_SPAWN: AtomicBool = AtomicBool::new(false);
-
-/// Asserts no shared libraries are used for functions spawned.
-///
-/// If the `safe-shared-libraries` feature is disabled this function must be
-/// called once to validate that the application does not spawn functions
-/// from a shared library.
-///
-/// This must be called once before the first call to a spawn function as
-/// otherwise they will panic.
-///
-/// # Safety
-///
-/// You must only call this function if you can guarantee that none of your
-/// `spawn` calls cross a shared library boundary.
-pub unsafe fn assert_spawn_is_safe() {
-    #[cfg(not(feature = "safe-shared-libraries"))]
-    {
-        ALLOW_UNSAFE_SPAWN.store(true, Ordering::SeqCst);
-    }
-}
 
 /// Can be used to configure the process.
 pub struct ProcConfig {
@@ -78,57 +52,13 @@ pub fn should_pass_args() -> bool {
 }
 
 fn find_shared_library_offset_by_name(name: &OsStr) -> isize {
-    #[cfg(feature = "safe-shared-libraries")]
-    {
-        let mut result = None;
-        findshlibs::TargetSharedLibrary::each(|shlib| {
-            if shlib.name() == name {
-                result = Some(
-                    shlib
-                        .segments()
-                        .next()
-                        .map_or(0, |x| x.actual_virtual_memory_address(shlib).0 as isize),
-                );
-                return IterationControl::Break;
-            }
-            IterationControl::Continue
-        });
-        match result {
-            Some(rv) => rv,
-            None => panic!("Unable to locate shared library {:?} in subprocess", name),
-        }
-    }
-    #[cfg(not(feature = "safe-shared-libraries"))]
-    {
-        let _ = name;
-        init as *const () as isize
-    }
+    let _ = name;
+    init as *const () as isize
 }
 
 fn find_library_name_and_offset(f: *const u8) -> (OsString, isize) {
-    #[cfg(feature = "safe-shared-libraries")]
-    {
-        let mut result = None;
-        findshlibs::TargetSharedLibrary::each(|shlib| {
-            let start = shlib
-                .segments()
-                .next()
-                .map_or(0, |x| x.actual_virtual_memory_address(shlib).0 as isize);
-            for seg in shlib.segments() {
-                if seg.contains_avma(shlib, Avma(f as usize)) {
-                    result = Some((shlib.name().to_owned(), start));
-                    return IterationControl::Break;
-                }
-            }
-            IterationControl::Continue
-        });
-        result.expect("Unable to locate function pointer in loaded image")
-    }
-    #[cfg(not(feature = "safe-shared-libraries"))]
-    {
-        let _ = f;
-        (OsString::new(), init as *const () as isize)
-    }
+    let _ = f;
+    (OsString::new(), init as *const () as isize)
 }
 
 impl ProcConfig {
@@ -225,15 +155,6 @@ pub fn init() {
 pub fn assert_spawn_okay() {
     if !INITIALIZED.load(Ordering::SeqCst) {
         panic!("procspawn was not initialized");
-    }
-    #[cfg(not(feature = "safe-shared-libraries"))]
-    {
-        if !ALLOW_UNSAFE_SPAWN.load(Ordering::SeqCst) {
-            panic!(
-                "spawn() prevented because safe-shared-library feature was \
-                 disabled and assert_no_shared_libraries was not invoked."
-            );
-        }
     }
 }
 
